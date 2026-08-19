@@ -219,6 +219,8 @@ function Dashboard() {
         ) || "blue"
       );
     });
+    const [showThemePicker, setShowThemePicker] =
+  useState(false);
 
   useEffect(() => {
     const theme =
@@ -1102,47 +1104,59 @@ function Dashboard() {
 
             {/* THEME */}
 
-            <div className="relative group">
-              <button
-                type="button"
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/[0.04] border border-white/10 flex items-center justify-center"
-              >
-                🎨
-              </button>
+<div className="relative">
+  <button
+    type="button"
+    onClick={() =>
+      setShowThemePicker(
+        (prev) => !prev
+      )
+    }
+    className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full border flex items-center justify-center transition-all ${
+      showThemePicker
+        ? "bg-white/10 border-white/20 scale-105"
+        : "bg-white/[0.04] border-white/10"
+    }`}
+    aria-label="Change theme"
+    aria-expanded={showThemePicker}
+  >
+    🎨
+  </button>
 
-              <div className="absolute right-0 mt-2 w-48 p-3 rounded-2xl bg-[#0b1728] border border-white/10 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
-                <div className="grid grid-cols-4 gap-2">
-                  {Object.keys(
-                    THEMES
-                  ).map(
-                    (name) => (
-                      <button
-                        type="button"
-                        key={name}
-                        onClick={() =>
-                          setThemeName(
-                            name
-                          )
-                        }
-                        className={`w-8 h-8 rounded-full border-2 ${
-                          themeName ===
-                          name
-                            ? "border-white scale-110"
-                            : "border-transparent"
-                        }`}
-                        style={{
-                          backgroundColor:
-                            THEMES[
-                              name
-                            ]
-                              .primary,
-                        }}
-                      />
-                    )
-                  )}
-                </div>
-              </div>
-            </div>
+  {showThemePicker && (
+    <div className="absolute right-0 top-full mt-2 w-48 p-3 rounded-2xl bg-[#0b1728] border border-white/10 shadow-2xl z-[100]">
+
+      <p className="text-xs text-slate-500 mb-3 px-1">
+        Choose theme
+      </p>
+
+      <div className="grid grid-cols-4 gap-3">
+        {Object.keys(THEMES).map(
+          (name) => (
+            <button
+              type="button"
+              key={name}
+              onClick={() => {
+                setThemeName(name);
+                setShowThemePicker(false);
+              }}
+              aria-label={`Select ${name} theme`}
+              className={`w-8 h-8 rounded-full border-2 transition-all ${
+                themeName === name
+                  ? "border-white scale-110 shadow-lg"
+                  : "border-transparent hover:scale-105"
+              }`}
+              style={{
+                backgroundColor:
+                  THEMES[name].primary,
+              }}
+            />
+          )
+        )}
+      </div>
+    </div>
+  )}
+</div>
 
             {/* AI */}
 
