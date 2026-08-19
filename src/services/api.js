@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
   },
@@ -504,8 +504,8 @@ export const getAISuggestion = async (
 
 export const checkServer = async () => {
   const response = await axios.get(
-    "http://localhost:5000/"
-  );
+  import.meta.env.VITE_API_URL.replace("/api", "")
+);
 
   return response.data;
 };
