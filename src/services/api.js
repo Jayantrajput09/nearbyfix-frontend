@@ -499,6 +499,103 @@ export const getAISuggestion = async (
 };
 
 // =====================================================
+// ADMIN
+// =====================================================
+
+// ADMIN DASHBOARD STATS
+export const getAdminStats = async () => {
+  const response = await API.get(
+    "/admin/stats"
+  );
+
+  return response.data;
+};
+
+
+// GET ALL USERS
+export const getAdminUsers = async (
+  params = {}
+) => {
+  const response = await API.get(
+    "/admin/users",
+    {
+      params,
+    }
+  );
+
+  return response.data;
+};
+
+
+// BLOCK USER
+export const blockUser = async (
+  userId
+) => {
+  if (!userId) {
+    throw new Error(
+      "User ID is required"
+    );
+  }
+
+  const response = await API.put(
+    `/admin/users/${userId}/block`
+  );
+
+  return response.data;
+};
+
+
+// UNBLOCK USER
+export const unblockUser = async (
+  userId
+) => {
+  if (!userId) {
+    throw new Error(
+      "User ID is required"
+    );
+  }
+
+  const response = await API.put(
+    `/admin/users/${userId}/unblock`
+  );
+
+  return response.data;
+};
+
+
+// DELETE USER
+export const deleteUser = async (
+  userId
+) => {
+  if (!userId) {
+    throw new Error(
+      "User ID is required"
+    );
+  }
+
+  const response = await API.delete(
+    `/admin/users/${userId}`
+  );
+
+  return response.data;
+};
+
+
+// GET ALL SERVICE REQUESTS
+export const getAdminRequests = async (
+  params = {}
+) => {
+  const response = await API.get(
+    "/admin/requests",
+    {
+      params,
+    }
+  );
+
+  return response.data;
+};
+
+// =====================================================
 // SERVER TEST
 // =====================================================
 

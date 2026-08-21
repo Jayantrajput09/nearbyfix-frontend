@@ -18,6 +18,16 @@ const Signup = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // SHOW / HIDE PASSWORD
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  // SHOW / HIDE CONFIRM PASSWORD
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
+
   // =====================================
   // INPUT CHANGE
   // =====================================
@@ -38,10 +48,6 @@ const Signup = () => {
 
     setError("");
     setSuccess("");
-
-    // -----------------------------------
-    // VALIDATION
-    // -----------------------------------
 
     if (
       !form.name ||
@@ -76,17 +82,11 @@ const Signup = () => {
     try {
       setLoading(true);
 
-      // -----------------------------------
-      // REGISTER
-      // -----------------------------------
-
       const data = await registerUser({
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         password: form.password,
-
-        // IMPORTANT
         role: form.role,
       });
 
@@ -102,24 +102,18 @@ const Signup = () => {
       ) {
         setError(
           data.message ||
-            "Registration failed."
+          "Registration failed."
         );
         return;
       }
 
-      // -----------------------------------
       // SAVE TOKEN
-      // -----------------------------------
-
       localStorage.setItem(
         "nearbyfix_token",
         data.token
       );
 
-      // -----------------------------------
       // SAVE USER
-      // -----------------------------------
-
       localStorage.setItem(
         "nearbyfix_user",
         JSON.stringify(data.user)
@@ -134,10 +128,7 @@ const Signup = () => {
         "Account created successfully!"
       );
 
-      // -----------------------------------
       // ROLE BASED REDIRECT
-      // -----------------------------------
-
       setTimeout(() => {
         if (
           data.user.role ===
@@ -157,8 +148,9 @@ const Signup = () => {
 
       setError(
         err.response?.data?.message ||
-          "Registration failed. Please try again."
+        "Registration failed. Please try again."
       );
+
     } finally {
       setLoading(false);
     }
@@ -193,15 +185,11 @@ const Signup = () => {
 
         <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
 
-          {/* ERROR */}
-
           {error && (
             <div className="mb-5 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400">
               {error}
             </div>
           )}
-
-          {/* SUCCESS */}
 
           {success && (
             <div className="mb-5 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400">
@@ -279,14 +267,39 @@ const Signup = () => {
                 Password
               </label>
 
-              <input
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-                type="password"
-                placeholder="Create password"
-                className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-white/10 outline-none focus:border-blue-500"
-              />
+              <div className="relative">
+
+                <input
+                  name="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
+                  placeholder="Create password"
+                  className="w-full px-4 py-3 pr-12 rounded-lg bg-slate-900 border border-white/10 outline-none focus:border-blue-500"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPassword(
+                      !showPassword
+                    )
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  {showPassword ? "🙈" : "👁️"}
+                </button>
+
+              </div>
 
             </div>
 
@@ -298,16 +311,43 @@ const Signup = () => {
                 Confirm Password
               </label>
 
-              <input
-                name="confirmPassword"
-                value={
-                  form.confirmPassword
-                }
-                onChange={handleChange}
-                type="password"
-                placeholder="Confirm password"
-                className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-white/10 outline-none focus:border-blue-500"
-              />
+              <div className="relative">
+
+                <input
+                  name="confirmPassword"
+                  value={
+                    form.confirmPassword
+                  }
+                  onChange={handleChange}
+                  type={
+                    showConfirmPassword
+                      ? "text"
+                      : "password"
+                  }
+                  placeholder="Confirm password"
+                  className="w-full px-4 py-3 pr-12 rounded-lg bg-slate-900 border border-white/10 outline-none focus:border-blue-500"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowConfirmPassword(
+                      !showConfirmPassword
+                    )
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
+                  aria-label={
+                    showConfirmPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  {showConfirmPassword
+                    ? "🙈"
+                    : "👁️"}
+                </button>
+
+              </div>
 
             </div>
 
@@ -338,8 +378,6 @@ const Signup = () => {
 
             </div>
 
-            {/* BUTTON */}
-
             <button
               type="submit"
               disabled={loading}
@@ -351,8 +389,6 @@ const Signup = () => {
             </button>
 
           </form>
-
-          {/* LOGIN */}
 
           <p className="text-center text-slate-400 mt-6">
 
@@ -368,7 +404,9 @@ const Signup = () => {
           </p>
 
         </div>
+
       </div>
+
     </div>
   );
 };
