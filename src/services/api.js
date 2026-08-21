@@ -78,6 +78,41 @@ export const loginUser = async (data) => {
 };
 
 // =====================================================
+// FORGOT / RESET PASSWORD
+// =====================================================
+
+export const forgotPassword = async (email) => {
+  const response = await API.post(
+    "/auth/forgot-password",
+    {
+      email: email.trim().toLowerCase(),
+    }
+  );
+
+  return response.data;
+};
+
+export const resetPassword = async (
+  token,
+  password,
+  confirmPassword
+) => {
+  if (!token) {
+    throw new Error("Reset token is missing");
+  }
+
+  const response = await API.post(
+    `/auth/reset-password/${token}`,
+    {
+      password,
+      confirmPassword,
+    }
+  );
+
+  return response.data;
+};
+
+// =====================================================
 // USER PROFILE
 // =====================================================
 
@@ -603,6 +638,76 @@ export const checkServer = async () => {
   const response = await axios.get(
   import.meta.env.VITE_API_URL.replace("/api", "")
 );
+
+  return response.data;
+};
+
+// =====================================================
+// REVIEWS
+// =====================================================
+
+// CREATE REVIEW
+export const createReview = async (data) => {
+  const response = await API.post(
+    "/reviews",
+    data
+  );
+
+  return response.data;
+};
+
+
+// GET TECHNICIAN REVIEWS
+export const getTechnicianReviews = async (
+  technicianId
+) => {
+  if (!technicianId) {
+    throw new Error(
+      "Technician ID is required"
+    );
+  }
+
+  const response = await API.get(
+    `/reviews/technician/${technicianId}`
+  );
+
+  return response.data;
+};
+
+
+// GET MY REVIEWS
+export const getMyReviews = async () => {
+  const response = await API.get(
+    "/reviews/my"
+  );
+
+  return response.data;
+};
+
+
+// ADMIN - GET ALL REVIEWS
+export const getAdminReviews = async () => {
+  const response = await API.get(
+    "/reviews/admin"
+  );
+
+  return response.data;
+};
+
+
+// ADMIN - DELETE REVIEW
+export const deleteReview = async (
+  reviewId
+) => {
+  if (!reviewId) {
+    throw new Error(
+      "Review ID is required"
+    );
+  }
+
+  const response = await API.delete(
+    `/reviews/admin/${reviewId}`
+  );
 
   return response.data;
 };

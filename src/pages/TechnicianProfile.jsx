@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import {
   getTechnicianById,
   createServiceRequest,
+  getTechnicianReviews,
 } from "../services/api";
 
 const TechnicianProfile = () => {
@@ -17,8 +18,19 @@ const TechnicianProfile = () => {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const [showRequestForm, setShowRequestForm] =
-    useState(false);
+  // =====================================
+  // REVIEWS
+  // =====================================
+
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reviewsError, setReviewsError] = useState("");
+
+  // =====================================
+  // REQUEST FORM
+  // =====================================
+
+  const [showRequestForm, setShowRequestForm] = useState(false);
 
   const [requestForm, setRequestForm] = useState({
     serviceType: "",
@@ -26,9 +38,9 @@ const TechnicianProfile = () => {
     description: "",
   });
 
-  // =====================================================
+  // =====================================
   // LOAD TECHNICIAN
-  // =====================================================
+  // =====================================
 
   useEffect(() => {
     const loadTechnician = async () => {
@@ -46,10 +58,7 @@ const TechnicianProfile = () => {
 
         const data = await getTechnicianById(id);
 
-        console.log(
-          "PUBLIC TECHNICIAN RESPONSE:",
-          data
-        );
+        console.log("PUBLIC TECHNICIAN RESPONSE:", data);
 
         if (!data?.success) {
           throw new Error(
@@ -116,9 +125,96 @@ const TechnicianProfile = () => {
     loadTechnician();
   }, [id, navigate]);
 
-  // =====================================================
+  // =====================================
+  // LOAD REVIEWS
+  // =====================================
+
+  useEffect(() => {
+    const loadReviews = async () => {
+      if (!id) return;
+
+      try {
+        setReviewsLoading(true);
+        setReviewsError("");
+
+        console.log(
+          "LOADING TECHNICIAN REVIEWS:",
+          id
+        );
+
+        const data = await getTechnicianReviews(id);
+
+        console.log(
+          "TECHNICIAN REVIEWS RESPONSE:",
+          data
+        );
+
+        /*
+          Backend response can be:
+
+          {
+            success: true,
+            reviews: [...]
+          }
+
+          OR
+
+          {
+            success: true,
+            data: [...]
+          }
+
+          OR directly:
+          [...]
+        */
+
+        let reviewList = [];
+
+        if (Array.isArray(data)) {
+          reviewList = data;
+        } else if (
+          Array.isArray(data?.reviews)
+        ) {
+          reviewList = data.reviews;
+        } else if (
+          Array.isArray(data?.data)
+        ) {
+          reviewList = data.data;
+        } else if (
+          Array.isArray(data?.results)
+        ) {
+          reviewList = data.results;
+        }
+
+        setReviews(reviewList);
+
+        console.log(
+          "FINAL REVIEWS:",
+          reviewList
+        );
+      } catch (err) {
+        console.error(
+          "LOAD REVIEWS ERROR:",
+          err
+        );
+
+        setReviews([]);
+        setReviewsError(
+          err.response?.data?.message ||
+            err.message ||
+            "Failed to load reviews"
+        );
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    loadReviews();
+  }, [id]);
+
+  // =====================================
   // FORM CHANGE
-  // =====================================================
+  // =====================================
 
   const handleRequestChange = (e) => {
     const { name, value } = e.target;
@@ -132,9 +228,9 @@ const TechnicianProfile = () => {
     setSuccess("");
   };
 
-  // =====================================================
+  // =====================================
   // CREATE REQUEST
-  // =====================================================
+  // =====================================
 
   const handleCreateRequest = async (e) => {
     e.preventDefault();
@@ -237,15 +333,17 @@ const TechnicianProfile = () => {
     }
   };
 
-  // =====================================================
+  // =====================================
   // LOADING
-  // =====================================================
+  // =====================================
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[#07111f] text-white flex items-center justify-center">
         <div className="text-center">
-          <div className="text-5xl">🔧</div>
+          <div className="text-5xl">
+            🔧
+          </div>
 
           <p className="mt-4 text-slate-400">
             Loading technician...
@@ -255,9 +353,9 @@ const TechnicianProfile = () => {
     );
   }
 
-  // =====================================================
+  // =====================================
   // ERROR / NOT FOUND
-  // =====================================================
+  // =====================================
 
   if (!technician) {
     return (
@@ -287,9 +385,9 @@ const TechnicianProfile = () => {
     );
   }
 
-  // =====================================================
+  // =====================================
   // DATA
-  // =====================================================
+  // =====================================
 
   const location =
     technician.location || {};
@@ -309,9 +407,70 @@ const TechnicianProfile = () => {
       ? technician.skills
       : [];
 
-  // =====================================================
+  // =====================================
+  // REVIEW DATA HELPERS
+  // =====================================
+
+  const getReviewerName = (review) => {
+    return (
+      review.user?.name ||
+      review.reviewer?.name ||
+      review.createdBy?.name ||
+      review.userName ||
+      review.name ||
+      "User"
+    );
+  };
+
+  const getReviewRating = (review) => {
+    const rating = Number(
+      review.rating
+    );
+
+    if (
+      Number.isFinite(rating) &&
+      rating >= 1 &&
+      rating <= 5
+    ) {
+      return rating;
+    }
+
+    return 0;
+  };
+
+  const getReviewText = (review) => {
+    return (
+      review.comment ||
+      review.review ||
+      review.text ||
+      review.message ||
+      ""
+    );
+  };
+
+  // =====================================
+  // AVERAGE RATING
+  // =====================================
+
+  const validRatings = reviews
+    .map(getReviewRating)
+    .filter((rating) => rating > 0);
+
+  const averageRating =
+    validRatings.length > 0
+      ? (
+          validRatings.reduce(
+            (sum, rating) =>
+              sum + rating,
+            0
+          ) /
+          validRatings.length
+        ).toFixed(1)
+      : "0.0";
+
+  // =====================================
   // PAGE
-  // =====================================================
+  // =====================================
 
   return (
     <div className="min-h-screen bg-[#07111f] text-white">
@@ -320,6 +479,7 @@ const TechnicianProfile = () => {
 
       <header className="border-b border-white/10 bg-[#07111f]/95 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-5 py-5">
+
           <div className="flex items-center justify-between">
 
             <button
@@ -346,6 +506,7 @@ const TechnicianProfile = () => {
             </button>
 
           </div>
+
         </div>
       </header>
 
@@ -353,11 +514,15 @@ const TechnicianProfile = () => {
 
       <main className="max-w-6xl mx-auto px-5 py-10">
 
+        {/* ERROR */}
+
         {error && (
           <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300">
             {error}
           </div>
         )}
+
+        {/* SUCCESS */}
 
         {success && (
           <div className="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
@@ -365,9 +530,13 @@ const TechnicianProfile = () => {
           </div>
         )}
 
-        {/* PROFILE */}
+        {/* =====================================
+            PROFILE
+        ===================================== */}
 
         <section className="rounded-3xl border border-white/10 bg-white/[0.03] overflow-hidden">
+
+          {/* PROFILE TOP */}
 
           <div className="p-7 md:p-10">
 
@@ -376,9 +545,12 @@ const TechnicianProfile = () => {
               {/* PHOTO */}
 
               <div className="shrink-0">
+
                 {technician.profilePhoto ? (
                   <img
-                    src={technician.profilePhoto}
+                    src={
+                      technician.profilePhoto
+                    }
                     alt={
                       technician.name ||
                       "Technician"
@@ -390,6 +562,7 @@ const TechnicianProfile = () => {
                     🔧
                   </div>
                 )}
+
               </div>
 
               {/* INFO */}
@@ -416,6 +589,27 @@ const TechnicianProfile = () => {
 
                 </div>
 
+                {/* RATING */}
+
+                <div className="flex items-center gap-3 mt-4">
+
+                  <span className="text-yellow-400 text-xl">
+                    ★
+                  </span>
+
+                  <span className="font-bold text-lg">
+                    {averageRating}
+                  </span>
+
+                  <span className="text-slate-400">
+                    ({reviews.length}{" "}
+                    {reviews.length === 1
+                      ? "review"
+                      : "reviews"})
+                  </span>
+
+                </div>
+
                 <p className="text-slate-400 mt-3">
                   {technician.bio ||
                     "Professional service technician."}
@@ -424,6 +618,7 @@ const TechnicianProfile = () => {
                 <div className="flex flex-wrap gap-3 mt-5">
 
                   <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+
                     <span className="text-slate-500 text-sm">
                       Experience
                     </span>
@@ -433,10 +628,12 @@ const TechnicianProfile = () => {
                         0}{" "}
                       years
                     </span>
+
                   </div>
 
                   {technician.phone && (
                     <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
+
                       <span className="text-slate-500 text-sm">
                         Phone
                       </span>
@@ -444,15 +641,21 @@ const TechnicianProfile = () => {
                       <span className="ml-2 font-semibold">
                         {technician.phone}
                       </span>
+
                     </div>
                   )}
 
                 </div>
+
               </div>
+
             </div>
+
           </div>
 
-          {/* SERVICES */}
+          {/* =====================================
+              SERVICES
+          ===================================== */}
 
           <div className="border-t border-white/10 p-7 md:p-10">
 
@@ -463,17 +666,19 @@ const TechnicianProfile = () => {
             <div className="flex flex-wrap gap-3 mt-4">
 
               {serviceTypes.length > 0 ? (
-                serviceTypes.map((service) => (
-                  <span
-                    key={service}
-                    className="px-4 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 capitalize"
-                  >
-                    {service.replace(
-                      /-/g,
-                      " "
-                    )}
-                  </span>
-                ))
+                serviceTypes.map(
+                  (service) => (
+                    <span
+                      key={service}
+                      className="px-4 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 capitalize"
+                    >
+                      {service.replace(
+                        /-/g,
+                        " "
+                      )}
+                    </span>
+                  )
+                )
               ) : (
                 <p className="text-slate-500">
                   No services listed.
@@ -481,9 +686,12 @@ const TechnicianProfile = () => {
               )}
 
             </div>
+
           </div>
 
-          {/* SKILLS */}
+          {/* =====================================
+              SKILLS
+          ===================================== */}
 
           {skills.length > 0 && (
             <div className="border-t border-white/10 p-7 md:p-10">
@@ -506,10 +714,13 @@ const TechnicianProfile = () => {
                 )}
 
               </div>
+
             </div>
           )}
 
-          {/* LOCATION */}
+          {/* =====================================
+              LOCATION
+          ===================================== */}
 
           <div className="border-t border-white/10 p-7 md:p-10">
 
@@ -540,7 +751,214 @@ const TechnicianProfile = () => {
 
         </section>
 
-        {/* REQUEST */}
+        {/* =====================================
+            REVIEWS
+        ===================================== */}
+
+        <section className="mt-6 rounded-3xl border border-white/10 bg-white/[0.03] p-7 md:p-10">
+
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+
+            <div>
+
+              <h2 className="text-2xl font-bold">
+                Customer Reviews
+              </h2>
+
+              <p className="text-slate-400 mt-1">
+                Reviews from customers who used this technician.
+              </p>
+
+            </div>
+
+            <div className="flex items-center gap-3">
+
+              <div className="text-yellow-400 text-3xl">
+                ★
+              </div>
+
+              <div>
+                <div className="text-2xl font-black">
+                  {averageRating}
+                </div>
+
+                <div className="text-sm text-slate-500">
+                  {reviews.length}{" "}
+                  {reviews.length === 1
+                    ? "review"
+                    : "reviews"}
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* REVIEW LOADING */}
+
+          {reviewsLoading && (
+            <div className="mt-8 text-center py-10">
+
+              <div className="text-3xl">
+                ⭐
+              </div>
+
+              <p className="text-slate-400 mt-3">
+                Loading reviews...
+              </p>
+
+            </div>
+          )}
+
+          {/* REVIEW ERROR */}
+
+          {!reviewsLoading &&
+            reviewsError && (
+              <div className="mt-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-300">
+                {reviewsError}
+              </div>
+            )}
+
+          {/* NO REVIEWS */}
+
+          {!reviewsLoading &&
+            !reviewsError &&
+            reviews.length === 0 && (
+              <div className="mt-8 text-center py-12 rounded-2xl bg-white/[0.02] border border-white/5">
+
+                <div className="text-5xl">
+                  ⭐
+                </div>
+
+                <h3 className="text-lg font-semibold mt-4">
+                  No reviews yet
+                </h3>
+
+                <p className="text-slate-500 mt-2">
+                  This technician has not received any reviews yet.
+                </p>
+
+              </div>
+            )}
+
+          {/* REVIEWS LIST */}
+
+          {!reviewsLoading &&
+            reviews.length > 0 && (
+              <div className="mt-8 space-y-4">
+
+                {reviews.map(
+                  (review, index) => {
+
+                    const rating =
+                      getReviewRating(
+                        review
+                      );
+
+                    const reviewerName =
+                      getReviewerName(
+                        review
+                      );
+
+                    const reviewText =
+                      getReviewText(
+                        review
+                      );
+
+                    return (
+                      <div
+                        key={
+                          review._id ||
+                          review.id ||
+                          index
+                        }
+                        className="p-5 rounded-2xl bg-white/[0.03] border border-white/10"
+                      >
+
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+
+                          <div className="flex items-center gap-3">
+
+                            <div className="w-11 h-11 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center font-bold text-blue-300">
+                              {reviewerName
+                                .charAt(0)
+                                .toUpperCase()}
+                            </div>
+
+                            <div>
+
+                              <h3 className="font-semibold">
+                                {reviewerName}
+                              </h3>
+
+                              {review.createdAt && (
+                                <p className="text-xs text-slate-500">
+                                  {new Date(
+                                    review.createdAt
+                                  ).toLocaleDateString(
+                                    "en-IN",
+                                    {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                    }
+                                  )}
+                                </p>
+                              )}
+
+                            </div>
+
+                          </div>
+
+                          {/* STARS */}
+
+                          <div className="flex items-center gap-1">
+
+                            {[1, 2, 3, 4, 5].map(
+                              (star) => (
+                                <span
+                                  key={
+                                    star
+                                  }
+                                  className={
+                                    star <=
+                                    rating
+                                      ? "text-yellow-400"
+                                      : "text-slate-600"
+                                  }
+                                >
+                                  ★
+                                </span>
+                              )
+                            )}
+
+                            <span className="ml-2 text-sm text-slate-400">
+                              {rating}/5
+                            </span>
+
+                          </div>
+
+                        </div>
+
+                        {reviewText && (
+                          <p className="mt-4 text-slate-300 leading-7">
+                            {reviewText}
+                          </p>
+                        )}
+
+                      </div>
+                    );
+                  }
+                )}
+
+              </div>
+            )}
+
+        </section>
+
+        {/* =====================================
+            REQUEST
+        ===================================== */}
 
         {technician.isAvailable !==
         false ? (
@@ -591,6 +1009,7 @@ const TechnicianProfile = () => {
                     className="w-full bg-[#020617] border border-white/10 rounded-xl px-4 py-3 outline-none"
                     required
                   >
+
                     <option value="">
                       Select service
                     </option>
@@ -610,6 +1029,7 @@ const TechnicianProfile = () => {
                     )}
 
                   </select>
+
                 </div>
 
                 {/* TITLE */}
