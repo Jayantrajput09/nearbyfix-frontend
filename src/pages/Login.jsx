@@ -214,6 +214,19 @@ const Login = () => {
 
               </div>
 
+              {/* FORGOT PASSWORD */}
+
+              <div className="text-right mt-2">
+
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-blue-400 hover:text-blue-300 hover:underline transition"
+                >
+                  Forgot Password?
+                </Link>
+
+              </div>
+
             </div>
 
             <button

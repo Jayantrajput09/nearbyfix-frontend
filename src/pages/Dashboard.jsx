@@ -17,6 +17,8 @@ import {
   searchTechnicians,
   getAISuggestion,
   updateProfile,
+  createReview,
+  getMyReviews,
 } from "../services/api";
 
 // =====================================================
@@ -265,6 +267,28 @@ function Dashboard() {
   const [requests, setRequests] =
     useState([]);
 
+      // =====================================================
+  // REVIEWS
+  // =====================================================
+
+  const [reviewOpen, setReviewOpen] =
+    useState(false);
+
+  const [selectedRequestForReview, setSelectedRequestForReview] =
+    useState(null);
+
+  const [reviewRating, setReviewRating] =
+    useState(0);
+
+  const [reviewComment, setReviewComment] =
+    useState("");
+
+  const [reviewSubmitting, setReviewSubmitting] =
+    useState(false);
+
+  const [reviewedRequestIds, setReviewedRequestIds] =
+    useState(new Set());
+
   const [selectedService, setSelectedService] =
     useState(null);
 
@@ -387,6 +411,40 @@ function Dashboard() {
           requestResponse?.requests ||
             []
         );
+
+                // =================================================
+        // LOAD MY REVIEWS
+        // =================================================
+
+        try {
+          const reviewResponse =
+            await getMyReviews();
+
+          const myReviews =
+            reviewResponse?.reviews || [];
+
+          setReviewedRequestIds(
+            new Set(
+              myReviews
+                .map(
+                  (review) =>
+                    review.serviceRequestId?._id ||
+                    review.serviceRequestId
+                )
+                .filter(Boolean)
+                .map(String)
+            )
+          );
+        } catch (reviewErr) {
+          console.warn(
+            "REVIEWS LOAD ERROR:",
+            reviewErr
+          );
+
+          setReviewedRequestIds(
+            new Set()
+          );
+        }
       } catch (err) {
         console.error(
           "DASHBOARD ERROR:",
@@ -954,6 +1012,109 @@ function Dashboard() {
         );
       } finally {
         setAiLoading(false);
+      }
+    };
+
+      // =====================================================
+  // SUBMIT REVIEW
+  // =====================================================
+
+  const handleSubmitReview =
+    async () => {
+      if (!selectedRequestForReview) {
+        return;
+      }
+
+      if (!reviewRating) {
+        setError(
+          "Please select a rating."
+        );
+        return;
+      }
+
+      if (!reviewComment.trim()) {
+        setError(
+          "Please write a review."
+        );
+        return;
+      }
+
+      const technicianId =
+        selectedRequestForReview
+          ?.technician?._id ||
+        selectedRequestForReview
+          ?.technician;
+
+      if (!technicianId) {
+        setError(
+          "Technician information not found."
+        );
+        return;
+      }
+
+      try {
+        setReviewSubmitting(true);
+        setError("");
+        setSuccess("");
+
+        const response =
+          await createReview({
+            serviceRequestId:
+              selectedRequestForReview._id,
+
+            technicianId,
+
+            rating: reviewRating,
+
+            comment:
+              reviewComment.trim(),
+          });
+
+        console.log(
+          "CREATE REVIEW RESPONSE:",
+          response
+        );
+
+        // Mark this request as reviewed
+        setReviewedRequestIds(
+          (prev) => {
+            const updated =
+              new Set(prev);
+
+            updated.add(
+              String(
+                selectedRequestForReview._id
+              )
+            );
+
+            return updated;
+          }
+        );
+
+        setReviewOpen(false);
+        setSelectedRequestForReview(
+          null
+        );
+        setReviewRating(0);
+        setReviewComment("");
+
+        setSuccess(
+          "Review submitted successfully! ⭐ Thank you."
+        );
+      } catch (err) {
+        console.error(
+          "CREATE REVIEW ERROR:",
+          err
+        );
+
+        setError(
+          err.response?.data
+            ?.message ||
+            err.message ||
+            "Failed to submit review."
+        );
+      } finally {
+        setReviewSubmitting(false);
       }
     };
 
@@ -2035,28 +2196,71 @@ function Dashboard() {
                             </div>
                           </div>
 
-                          {request.technician && (
-                            <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center gap-3">
+                          
+                      {request.technician && (
+  <div className="mt-4 pt-4 border-t border-white/[0.06]">
 
-                              <div className="w-10 h-10 rounded-full bg-[var(--theme-primaryBg)] flex items-center justify-center">
-                                👨‍🔧
-                              </div>
+    <div className="flex items-center gap-3">
 
-                              <div>
-                                <p className="text-xs text-slate-500">
-                                  Assigned technician
-                                </p>
+      <div className="w-10 h-10 rounded-full bg-[var(--theme-primaryBg)] flex items-center justify-center">
+        👨‍🔧
+      </div>
 
-                                <p className="text-sm font-medium">
-                                  {
-                                    request
-                                      .technician
-                                      .name
-                                  }
-                                </p>
-                              </div>
-                            </div>
-                          )}
+      <div className="flex-1 min-w-0">
+
+        <p className="text-xs text-slate-500">
+          Assigned technician
+        </p>
+
+        <p className="text-sm font-medium">
+          {request.technician.name}
+        </p>
+
+      </div>
+
+    </div>
+
+    {/* RATE TECHNICIAN */}
+
+    {request.status === "completed" && (
+      <div className="mt-4">
+
+        {reviewedRequestIds.has(
+          String(request._id)
+        ) ? (
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-400/10 border border-emerald-400/20 text-emerald-300 text-sm">
+            <span>✓</span>
+            <span>
+              You reviewed this service
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedRequestForReview(
+                request
+              );
+
+              setReviewRating(0);
+
+              setReviewComment("");
+
+              setError("");
+
+              setReviewOpen(true);
+            }}
+            className="w-full py-3 rounded-xl bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-400/20 text-yellow-300 font-semibold transition"
+          >
+            ⭐ Rate Technician
+          </button>
+        )}
+
+      </div>
+    )}
+
+  </div>
+)}
                         </div>
                       );
                     }
@@ -2123,6 +2327,7 @@ function Dashboard() {
                 onClick={() =>
                   setAiOpen(false)
                 }
+                
                 className="text-slate-500 hover:text-white text-xl"
               >
                 ✕
@@ -2171,6 +2376,8 @@ function Dashboard() {
                   </div>
                 </div>
               )}
+
+                    
             </div>
 
             {/* QUICK QUESTIONS */}
@@ -2249,13 +2456,149 @@ function Dashboard() {
                   className="w-12 shrink-0 rounded-xl bg-[var(--theme-primary)] disabled:opacity-40"
                 >
                   ➤
+                  
                 </button>
               </div>
             </div>
+
+
           </div>
         </div>
       )}
+      {/* =================================================
+          REVIEW MODAL
+      ================================================= */}
+
+      {reviewOpen && (
+        <div className="fixed inset-0 z-[110] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+
+          <div className="w-full max-w-md rounded-[28px] bg-[#0b1728] border border-white/10 shadow-2xl overflow-hidden">
+
+            <div className="p-5 border-b border-white/[0.07] flex items-center gap-3">
+
+              <div className="w-11 h-11 rounded-xl bg-yellow-400/10 border border-yellow-400/20 flex items-center justify-center text-xl">
+                ⭐
+              </div>
+
+              <div className="flex-1">
+                <h3 className="font-bold text-lg">
+                  Rate Technician
+                </h3>
+
+                <p className="text-xs text-slate-500 mt-1">
+                  {selectedRequestForReview?.technician?.name ||
+                    "Technician"}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewOpen(false);
+                  setSelectedRequestForReview(null);
+                }}
+                className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/10 text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+
+            </div>
+
+            <div className="p-5">
+
+              <p className="text-sm text-slate-400 text-center">
+                How was your experience?
+              </p>
+
+              <div className="flex justify-center gap-2 mt-5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    type="button"
+                    key={star}
+                    onClick={() => setReviewRating(star)}
+                    className={`text-4xl transition-transform hover:scale-110 ${
+                      star <= reviewRating
+                        ? "text-yellow-400"
+                        : "text-slate-600"
+                    }`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+
+              {reviewRating > 0 && (
+                <p className="text-center text-sm text-yellow-300 mt-3">
+                  {reviewRating === 1 && "Poor"}
+                  {reviewRating === 2 && "Needs improvement"}
+                  {reviewRating === 3 && "Good"}
+                  {reviewRating === 4 && "Very good"}
+                  {reviewRating === 5 && "Excellent!"}
+                </p>
+              )}
+
+              <div className="mt-6">
+
+                <label className="text-sm text-slate-300">
+                  Your review
+                </label>
+
+                <textarea
+                  value={reviewComment}
+                  onChange={(e) =>
+                    setReviewComment(e.target.value)
+                  }
+                  rows="5"
+                  maxLength={500}
+                  placeholder="Tell us about your experience..."
+                  className="mt-2 w-full px-4 py-3.5 rounded-xl bg-[#07111f] border border-white/10 outline-none resize-none text-sm"
+                />
+
+                <div className="text-right text-xs text-slate-600 mt-1">
+                  {reviewComment.length}/500
+                </div>
+
+              </div>
+
+              <div className="flex gap-3 mt-5">
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReviewOpen(false);
+                    setSelectedRequestForReview(null);
+                  }}
+                  disabled={reviewSubmitting}
+                  className="flex-1 py-3 rounded-xl border border-white/10 text-slate-300"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleSubmitReview}
+                  disabled={
+                    reviewSubmitting ||
+                    !reviewRating ||
+                    !reviewComment.trim()
+                  }
+                  className="flex-1 py-3 rounded-xl bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-bold"
+                >
+                  {reviewSubmitting
+                    ? "Submitting..."
+                    : "Submit Review ⭐"}
+                </button>
+
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      )}
+
     </div>
+    
   );
 }
 

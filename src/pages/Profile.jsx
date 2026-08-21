@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import {
   getProfile,
   updateProfile,
+  getTechnicianReviews,
 } from "../services/api";
 
 const SERVICES = [
@@ -41,19 +43,32 @@ const SERVICES = [
 function Profile() {
   const navigate = useNavigate();
 
-  const [loading, setLoading] =
-    useState(true);
+  // =====================================
+  // STATES
+  // =====================================
 
-  const [saving, setSaving] =
-    useState(false);
-
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [gettingLocation, setGettingLocation] =
     useState(false);
 
-  const [message, setMessage] =
-    useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const [currentUser, setCurrentUser] =
+    useState(null);
 
   const [photoPreview, setPhotoPreview] =
+    useState("");
+
+  const [skillInput, setSkillInput] =
+    useState("");
+
+  // REVIEWS
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] =
+    useState(false);
+  const [reviewsError, setReviewsError] =
     useState("");
 
   const [form, setForm] = useState({
@@ -79,7 +94,7 @@ function Profile() {
   });
 
   // =====================================
-  // LOAD
+  // LOAD PROFILE
   // =====================================
 
   useEffect(() => {
@@ -89,18 +104,86 @@ function Profile() {
   const loadProfile = async () => {
     try {
       setLoading(true);
+      setError("");
+      setMessage("");
 
-      const data =
-        await getProfile();
+      const token =
+        localStorage.getItem(
+          "nearbyfix_token"
+        );
 
-      if (!data?.success || !data?.user) {
+      if (!token) {
+        navigate("/login", {
+          replace: true,
+        });
+        return;
+      }
+
+      console.log(
+        "================================="
+      );
+      console.log("LOADING PROFILE");
+      console.log(
+        "================================="
+      );
+
+      const data = await getProfile();
+
+      console.log(
+        "GET PROFILE RESPONSE:",
+        data
+      );
+
+      if (
+        !data?.success ||
+        !data?.user
+      ) {
         throw new Error(
           data?.message ||
-            "Profile data not found"
+            "Profile data not found."
         );
       }
 
       const user = data.user;
+
+      console.log(
+        "CURRENT USER:",
+        user
+      );
+
+      console.log(
+        "CURRENT USER ID:",
+        user._id
+      );
+
+      console.log(
+        "CURRENT USER ROLE:",
+        user.role
+      );
+
+      setCurrentUser(user);
+
+      // Keep localStorage updated
+      localStorage.setItem(
+        "nearbyfix_user",
+        JSON.stringify(user)
+      );
+
+      const coordinates =
+        user.location?.coordinates ||
+        {};
+
+      const lat =
+        coordinates.lat !== undefined &&
+        coordinates.lat !== null
+          ? Number(coordinates.lat)
+          : null;
+
+      const lng =
+        coordinates.lng !== undefined &&
+        coordinates.lng !== null
+          ? Number(coordinates.lng)
+          : null;
 
       setForm({
         name: user.name || "",
@@ -119,7 +202,7 @@ function Profile() {
           : [],
 
         experience:
-          user.experience || 0,
+          Number(user.experience) || 0,
 
         serviceTypes:
           Array.isArray(
@@ -143,27 +226,38 @@ function Profile() {
         pincode:
           user.location?.pincode || "",
 
-        lat:
-          user.location?.coordinates
-            ?.lat ?? null,
-
-        lng:
-          user.location?.coordinates
-            ?.lng ?? null,
+        lat,
+        lng,
       });
 
       setPhotoPreview(
         user.profilePhoto || ""
       );
-    } catch (error) {
-      console.error(
-        "PROFILE LOAD ERROR:",
-        error
-      );
+
+      // =================================
+      // LOAD REVIEWS FOR TECHNICIAN
+      // =================================
 
       if (
-        error.response?.status === 401
+        user.role === "technician" &&
+        user._id
       ) {
+        await loadTechnicianReviews(
+          user._id
+        );
+      } else {
+        setReviews([]);
+      }
+    } catch (err) {
+      console.error(
+        "PROFILE LOAD ERROR:",
+        err
+      );
+
+      const status =
+        err.response?.status;
+
+      if (status === 401) {
         localStorage.removeItem(
           "nearbyfix_token"
         );
@@ -179,9 +273,9 @@ function Profile() {
         return;
       }
 
-      setMessage(
-        error.response?.data?.message ||
-          error.message ||
+      setError(
+        err.response?.data?.message ||
+          err.message ||
           "Failed to load profile."
       );
     } finally {
@@ -190,7 +284,115 @@ function Profile() {
   };
 
   // =====================================
-  // INPUT
+  // LOAD TECHNICIAN REVIEWS
+  // =====================================
+
+  const loadTechnicianReviews = async (
+    technicianId
+  ) => {
+    if (!technicianId) {
+      console.error(
+        "TECHNICIAN ID MISSING"
+      );
+
+      setReviews([]);
+      return;
+    }
+
+    try {
+      setReviewsLoading(true);
+      setReviewsError("");
+
+      console.log(
+        "================================="
+      );
+      console.log(
+        "LOADING TECHNICIAN REVIEWS"
+      );
+      console.log(
+        "TECHNICIAN ID:",
+        technicianId
+      );
+      console.log(
+        "================================="
+      );
+
+      const response =
+        await getTechnicianReviews(
+          technicianId
+        );
+
+      console.log(
+        "GET TECHNICIAN REVIEWS RESPONSE:",
+        response
+      );
+
+      // ---------------------------------
+      // Different possible backend shapes
+      // ---------------------------------
+
+      let reviewList = [];
+
+      if (
+        Array.isArray(response)
+      ) {
+        reviewList = response;
+      } else if (
+        Array.isArray(
+          response?.reviews
+        )
+      ) {
+        reviewList =
+          response.reviews;
+      } else if (
+        Array.isArray(
+          response?.data?.reviews
+        )
+      ) {
+        reviewList =
+          response.data.reviews;
+      }
+
+      console.log(
+        "REVIEWS FOUND:",
+        reviewList.length
+      );
+
+      console.log(
+        "REVIEWS:",
+        reviewList
+      );
+
+      setReviews(reviewList);
+    } catch (err) {
+      console.error(
+        "TECHNICIAN REVIEWS ERROR:",
+        err
+      );
+
+      console.error(
+        "STATUS:",
+        err.response?.status
+      );
+
+      console.error(
+        "SERVER RESPONSE:",
+        err.response?.data
+      );
+
+      setReviews([]);
+      setReviewsError(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to load reviews."
+      );
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  // =====================================
+  // INPUT CHANGE
   // =====================================
 
   const handleChange = (e) => {
@@ -203,15 +405,16 @@ function Profile() {
       ...prev,
       [name]: value,
     }));
+
+    setMessage("");
+    setError("");
   };
 
   // =====================================
-  // PHOTO RESIZE
+  // PHOTO CHANGE
   // =====================================
 
-  const handlePhotoChange = (
-    e
-  ) => {
+  const handlePhotoChange = (e) => {
     const file =
       e.target.files?.[0];
 
@@ -220,16 +423,17 @@ function Profile() {
     if (
       !file.type.startsWith("image/")
     ) {
-      setMessage(
+      setError(
         "Please select an image file."
       );
       return;
     }
 
     if (
-      file.size > 10 * 1024 * 1024
+      file.size >
+      10 * 1024 * 1024
     ) {
-      setMessage(
+      setError(
         "Image is too large. Please select an image under 10MB."
       );
       return;
@@ -250,11 +454,8 @@ function Profile() {
 
         const MAX_SIZE = 500;
 
-        let width =
-          img.width;
-
-        let height =
-          img.height;
+        let width = img.width;
+        let height = img.height;
 
         if (width > height) {
           if (
@@ -265,8 +466,7 @@ function Profile() {
                 MAX_SIZE) /
               width;
 
-            width =
-              MAX_SIZE;
+            width = MAX_SIZE;
           }
         } else {
           if (
@@ -277,16 +477,12 @@ function Profile() {
                 MAX_SIZE) /
               height;
 
-            height =
-              MAX_SIZE;
+            height = MAX_SIZE;
           }
         }
 
-        canvas.width =
-          width;
-
-        canvas.height =
-          height;
+        canvas.width = width;
+        canvas.height = height;
 
         const ctx =
           canvas.getContext(
@@ -320,10 +516,11 @@ function Profile() {
         setMessage(
           "Photo selected. Click Save Profile to save it."
         );
+
+        setError("");
       };
 
-      img.src =
-        reader.result;
+      img.src = reader.result;
     };
 
     reader.readAsDataURL(file);
@@ -340,6 +537,8 @@ function Profile() {
       ...prev,
       profilePhoto: "",
     }));
+
+    setMessage("");
   };
 
   // =====================================
@@ -369,14 +568,13 @@ function Profile() {
             ],
       };
     });
+
+    setMessage("");
   };
 
   // =====================================
   // SKILLS
   // =====================================
-
-  const [skillInput, setSkillInput] =
-    useState("");
 
   const addSkill = () => {
     const skill =
@@ -384,11 +582,14 @@ function Profile() {
 
     if (!skill) return;
 
-    if (
-      form.skills.includes(
-        skill
-      )
-    ) {
+    const alreadyExists =
+      form.skills.some(
+        (item) =>
+          item.toLowerCase() ===
+          skill.toLowerCase()
+      );
+
+    if (alreadyExists) {
       setSkillInput("");
       return;
     }
@@ -425,7 +626,7 @@ function Profile() {
     if (
       !navigator.geolocation
     ) {
-      setMessage(
+      setError(
         "Location is not supported by your browser."
       );
 
@@ -433,7 +634,7 @@ function Profile() {
     }
 
     setGettingLocation(true);
-
+    setError("");
     setMessage(
       "Getting your current location..."
     );
@@ -441,10 +642,14 @@ function Profile() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const lat =
-          position.coords.latitude;
+          Number(
+            position.coords.latitude
+          );
 
         const lng =
-          position.coords.longitude;
+          Number(
+            position.coords.longitude
+          );
 
         setForm((prev) => ({
           ...prev,
@@ -505,39 +710,46 @@ function Profile() {
           setMessage(
             "Location detected successfully."
           );
-        } catch (error) {
+        } catch (err) {
           console.error(
-            "LOCATION ERROR:",
-            error
+            "REVERSE LOCATION ERROR:",
+            err
           );
 
           setMessage(
             "Coordinates detected, but address could not be found."
           );
         } finally {
-          setGettingLocation(
-            false
-          );
+          setGettingLocation(false);
         }
       },
 
-      (error) => {
+      (err) => {
         console.error(
-          error
+          "GEOLOCATION ERROR:",
+          err
         );
 
-        setGettingLocation(
-          false
-        );
+        setGettingLocation(false);
 
-        if (
-          error.code === 1
-        ) {
-          setMessage(
+        if (err.code === 1) {
+          setError(
             "Location permission denied."
           );
+        } else if (
+          err.code === 2
+        ) {
+          setError(
+            "Location could not be determined."
+          );
+        } else if (
+          err.code === 3
+        ) {
+          setError(
+            "Location request timed out."
+          );
         } else {
-          setMessage(
+          setError(
             "Unable to determine location."
           );
         }
@@ -552,7 +764,7 @@ function Profile() {
   };
 
   // =====================================
-  // SAVE
+  // SAVE PROFILE
   // =====================================
 
   const handleSubmit = async (
@@ -562,16 +774,27 @@ function Profile() {
 
     try {
       setSaving(true);
+      setError("");
       setMessage("");
 
+      if (!form.name.trim()) {
+        throw new Error(
+          "Name is required."
+        );
+      }
+
       const payload = {
-        name: form.name,
-        phone: form.phone,
+        name:
+          form.name.trim(),
+
+        phone:
+          form.phone.trim(),
 
         profilePhoto:
           form.profilePhoto,
 
-        bio: form.bio,
+        bio:
+          form.bio.trim(),
 
         skills:
           form.skills,
@@ -579,7 +802,7 @@ function Profile() {
         experience:
           Number(
             form.experience
-          ),
+          ) || 0,
 
         serviceTypes:
           form.serviceTypes,
@@ -589,16 +812,16 @@ function Profile() {
 
         location: {
           address:
-            form.address,
+            form.address.trim(),
 
           city:
-            form.city,
+            form.city.trim(),
 
           state:
-            form.state,
+            form.state.trim(),
 
           pincode:
-            form.pincode,
+            form.pincode.trim(),
 
           coordinates: {
             lat:
@@ -615,8 +838,20 @@ function Profile() {
       };
 
       console.log(
-        "PROFILE UPDATE:",
+        "================================="
+      );
+
+      console.log(
+        "UPDATING PROFILE"
+      );
+
+      console.log(
+        "PAYLOAD:",
         payload
+      );
+
+      console.log(
+        "================================="
       );
 
       const data =
@@ -624,58 +859,145 @@ function Profile() {
           payload
         );
 
+      console.log(
+        "UPDATE PROFILE RESPONSE:",
+        data
+      );
+
       if (
         !data?.success ||
         !data?.user
       ) {
         throw new Error(
           data?.message ||
-            "Profile update failed"
+            "Profile update failed."
         );
       }
+
+      const updatedUser =
+        data.user;
+
+      setCurrentUser(
+        updatedUser
+      );
 
       localStorage.setItem(
         "nearbyfix_user",
         JSON.stringify(
-          data.user
+          updatedUser
         )
       );
 
       setForm((prev) => ({
         ...prev,
 
-        profilePhoto:
-          data.user
-            .profilePhoto ||
+        name:
+          updatedUser.name ||
           "",
+
+        email:
+          updatedUser.email ||
+          "",
+
+        phone:
+          updatedUser.phone ||
+          "",
+
+        profilePhoto:
+          updatedUser.profilePhoto ||
+          "",
+
+        bio:
+          updatedUser.bio ||
+          "",
+
+        skills:
+          Array.isArray(
+            updatedUser.skills
+          )
+            ? updatedUser.skills
+            : [],
+
+        experience:
+          Number(
+            updatedUser.experience
+          ) || 0,
+
+        serviceTypes:
+          Array.isArray(
+            updatedUser.serviceTypes
+          )
+            ? updatedUser.serviceTypes
+            : [],
+
+        isAvailable:
+          updatedUser.isAvailable !==
+          false,
+
+        address:
+          updatedUser.location
+            ?.address || "",
+
+        city:
+          updatedUser.location
+            ?.city || "",
+
+        state:
+          updatedUser.location
+            ?.state || "",
+
+        pincode:
+          updatedUser.location
+            ?.pincode || "",
+
+        lat:
+          updatedUser.location
+            ?.coordinates?.lat ??
+          null,
+
+        lng:
+          updatedUser.location
+            ?.coordinates?.lng ??
+          null,
       }));
 
       setPhotoPreview(
-        data.user.profilePhoto ||
+        updatedUser.profilePhoto ||
           ""
       );
 
       setMessage(
         "Profile updated successfully."
       );
-    } catch (error) {
+
+      // Reload reviews after profile update
+      if (
+        updatedUser.role ===
+          "technician" &&
+        updatedUser._id
+      ) {
+        await loadTechnicianReviews(
+          updatedUser._id
+        );
+      }
+    } catch (err) {
       console.error(
         "PROFILE UPDATE ERROR:",
-        error
+        err
       );
 
       if (
-        error.response?.status ===
+        err.response?.status ===
         413
       ) {
-        setMessage(
+        setError(
           "Photo is too large. Please choose another image."
         );
       } else {
-        setMessage(
-          error.response?.data
+        setError(
+          err.response?.data
             ?.message ||
-            error.message ||
+            err.message ||
             "Failed to update profile."
         );
       }
@@ -683,6 +1005,54 @@ function Profile() {
       setSaving(false);
     }
   };
+
+  // =====================================
+  // NAVIGATION
+  // =====================================
+
+  const goBack = () => {
+    if (
+      currentUser?.role ===
+      "technician"
+    ) {
+      navigate("/technician");
+    } else {
+      navigate("/dashboard");
+    }
+  };
+
+  // =====================================
+  // RATING
+  // =====================================
+
+  const calculateAverageRating = () => {
+    if (!reviews.length) {
+      return Number(
+        currentUser?.rating || 0
+      );
+    }
+
+    const total =
+      reviews.reduce(
+        (sum, review) =>
+          sum +
+          Number(
+            review.rating || 0
+          ),
+        0
+      );
+
+    return total / reviews.length;
+  };
+
+  const averageRating =
+    calculateAverageRating();
+
+  const totalReviews =
+    reviews.length ||
+    Number(
+      currentUser?.totalReviews || 0
+    );
 
   // =====================================
   // LOADING
@@ -717,20 +1087,7 @@ function Profile() {
         <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between">
 
           <button
-            onClick={() => {
-              if (
-                form.serviceTypes.length >
-                0
-              ) {
-                navigate(
-                  "/technician"
-                );
-              } else {
-                navigate(
-                  "/dashboard"
-                );
-              }
-            }}
+            onClick={goBack}
             className="text-slate-300 hover:text-white"
           >
             ← Back
@@ -744,7 +1101,6 @@ function Profile() {
           </div>
 
           <div className="w-16" />
-
         </div>
       </header>
 
@@ -753,7 +1109,6 @@ function Profile() {
         {/* TITLE */}
 
         <div className="mb-8">
-
           <p className="text-blue-400 text-sm font-semibold">
             ACCOUNT SETTINGS
           </p>
@@ -766,8 +1121,17 @@ function Profile() {
             Manage your personal information,
             technician details and location.
           </p>
-
         </div>
+
+        {/* ERROR */}
+
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300">
+            {error}
+          </div>
+        )}
+
+        {/* MESSAGE */}
 
         {message && (
           <div className="mb-6 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300">
@@ -775,22 +1139,20 @@ function Profile() {
           </div>
         )}
 
+        {/* =====================================
+            PROFILE FORM
+        ===================================== */}
+
         <form
-          onSubmit={
-            handleSubmit
-          }
+          onSubmit={handleSubmit}
           className="space-y-6"
         >
 
-          {/* =====================================
-              PROFILE PHOTO
-          ===================================== */}
+          {/* PHOTO */}
 
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 md:p-8">
 
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-
-              {/* PHOTO */}
 
               <div className="relative">
 
@@ -859,9 +1221,7 @@ function Profile() {
 
           </section>
 
-          {/* =====================================
-              PERSONAL
-          ===================================== */}
+          {/* PERSONAL */}
 
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 md:p-8">
 
@@ -929,292 +1289,283 @@ function Profile() {
               TECHNICIAN SECTION
           ===================================== */}
 
-          {form.serviceTypes !==
-            undefined &&
-            localStorage.getItem(
-              "nearbyfix_user"
-            ) &&
-            JSON.parse(
-              localStorage.getItem(
-                "nearbyfix_user"
-              )
-            )?.role ===
-              "technician" && (
+          {currentUser?.role ===
+            "technician" && (
 
-              <section className="rounded-3xl border border-blue-500/20 bg-blue-500/[0.03] p-6 md:p-8">
+            <section className="rounded-3xl border border-blue-500/20 bg-blue-500/[0.03] p-6 md:p-8">
 
-                <div className="flex items-center justify-between mb-6">
-
-                  <div>
-                    <p className="text-blue-400 text-sm font-semibold">
-                      TECHNICIAN PROFILE
-                    </p>
-
-                    <h2 className="text-2xl font-bold mt-1">
-                      Professional Details
-                    </h2>
-                  </div>
-
-                  <div className="text-4xl">
-                    🛠️
-                  </div>
-
-                </div>
-
-                {/* SERVICE TYPE */}
+              <div className="flex items-center justify-between mb-6">
 
                 <div>
-
-                  <label className="text-sm text-slate-300 font-medium">
-                    What services do you provide?
-                  </label>
-
-                  <p className="text-xs text-slate-500 mt-1 mb-4">
-                    Select one or more services.
+                  <p className="text-blue-400 text-sm font-semibold">
+                    TECHNICIAN PROFILE
                   </p>
 
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <h2 className="text-2xl font-bold mt-1">
+                    Professional Details
+                  </h2>
+                </div>
 
-                    {SERVICES.map(
-                      (service) => {
-                        const selected =
-                          form.serviceTypes.includes(
-                            service.id
-                          );
+                <div className="text-4xl">
+                  🛠️
+                </div>
 
-                        return (
-                          <button
-                            type="button"
-                            key={
-                              service.id
-                            }
-                            onClick={() =>
-                              toggleService(
-                                service.id
-                              )
-                            }
-                            className={`p-4 rounded-2xl border text-left transition ${
-                              selected
-                                ? "border-blue-500 bg-blue-500/15"
-                                : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
-                            }`}
-                          >
+              </div>
 
-                            <div className="text-2xl">
-                              {
-                                service.icon
-                              }
-                            </div>
+              {/* SERVICES */}
 
-                            <div className="font-semibold mt-2">
-                              {
-                                service.name
-                              }
-                            </div>
+              <div>
 
-                            {selected && (
-                              <div className="text-xs text-blue-400 mt-1">
-                                ✓ Selected
-                              </div>
-                            )}
+                <label className="text-sm text-slate-300 font-medium">
+                  What services do you provide?
+                </label>
 
-                          </button>
+                <p className="text-xs text-slate-500 mt-1 mb-4">
+                  Select one or more services.
+                </p>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+
+                  {SERVICES.map(
+                    (service) => {
+
+                      const selected =
+                        form.serviceTypes.includes(
+                          service.id
                         );
-                      }
-                    )}
 
-                  </div>
+                      return (
+                        <button
+                          type="button"
+                          key={
+                            service.id
+                          }
+                          onClick={() =>
+                            toggleService(
+                              service.id
+                            )
+                          }
+                          className={`p-4 rounded-2xl border text-left transition ${
+                            selected
+                              ? "border-blue-500 bg-blue-500/15"
+                              : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]"
+                          }`}
+                        >
 
-                </div>
-
-                {/* EXPERIENCE */}
-
-                <div className="mt-7">
-
-                  <label className="text-sm text-slate-300">
-                    Experience
-                  </label>
-
-                  <div className="flex items-center gap-3 mt-2">
-
-                    <input
-                      type="number"
-                      min="0"
-                      max="60"
-                      name="experience"
-                      value={
-                        form.experience
-                      }
-                      onChange={
-                        handleChange
-                      }
-                      className="w-32 px-4 py-3 rounded-xl bg-[#0f172a] border border-white/10 outline-none focus:border-blue-500"
-                    />
-
-                    <span className="text-slate-500">
-                      years
-                    </span>
-
-                  </div>
-
-                </div>
-
-                {/* BIO */}
-
-                <div className="mt-7">
-
-                  <label className="text-sm text-slate-300">
-                    About you
-                  </label>
-
-                  <textarea
-                    name="bio"
-                    value={
-                      form.bio
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    rows="4"
-                    maxLength="1000"
-                    placeholder="Example: I am an experienced electrician specializing in home wiring, fans, switches and electrical repairs."
-                    className="mt-2 w-full px-4 py-3 rounded-xl bg-[#0f172a] border border-white/10 outline-none focus:border-blue-500 resize-none"
-                  />
-
-                  <p className="text-xs text-slate-600 mt-1 text-right">
-                    {
-                      form.bio.length
-                    }
-                    /1000
-                  </p>
-
-                </div>
-
-                {/* SKILLS */}
-
-                <div className="mt-7">
-
-                  <label className="text-sm text-slate-300">
-                    Skills
-                  </label>
-
-                  <div className="flex gap-2 mt-2">
-
-                    <input
-                      value={
-                        skillInput
-                      }
-                      onChange={(e) =>
-                        setSkillInput(
-                          e.target.value
-                        )
-                      }
-                      onKeyDown={(e) => {
-                        if (
-                          e.key ===
-                          "Enter"
-                        ) {
-                          e.preventDefault();
-                          addSkill();
-                        }
-                      }}
-                      placeholder="e.g. Home Wiring"
-                      className="flex-1 px-4 py-3 rounded-xl bg-[#0f172a] border border-white/10 outline-none focus:border-blue-500"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={
-                        addSkill
-                      }
-                      className="px-5 rounded-xl bg-white/10 hover:bg-white/15"
-                    >
-                      Add
-                    </button>
-
-                  </div>
-
-                  {form.skills
-                    .length >
-                    0 && (
-                    <div className="flex flex-wrap gap-2 mt-3">
-
-                      {form.skills.map(
-                        (skill) => (
-                          <button
-                            type="button"
-                            key={
-                              skill
-                            }
-                            onClick={() =>
-                              removeSkill(
-                                skill
-                              )
-                            }
-                            className="px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm"
-                          >
+                          <div className="text-2xl">
                             {
-                              skill
-                            }{" "}
-                            ×
-                          </button>
-                        )
-                      )}
+                              service.icon
+                            }
+                          </div>
 
-                    </div>
+                          <div className="font-semibold mt-2">
+                            {
+                              service.name
+                            }
+                          </div>
+
+                          {selected && (
+                            <div className="text-xs text-blue-400 mt-1">
+                              ✓ Selected
+                            </div>
+                          )}
+
+                        </button>
+                      );
+                    }
                   )}
 
                 </div>
 
-                {/* AVAILABILITY */}
+              </div>
 
-                <div className="mt-7 flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+              {/* EXPERIENCE */}
 
-                  <div>
+              <div className="mt-7">
 
-                    <p className="font-semibold">
-                      Available for jobs
-                    </p>
+                <label className="text-sm text-slate-300">
+                  Experience
+                </label>
 
-                    <p className="text-xs text-slate-500 mt-1">
-                      Customers can find you when
-                      you are available.
-                    </p>
+                <div className="flex items-center gap-3 mt-2">
 
-                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    max="60"
+                    name="experience"
+                    value={
+                      form.experience
+                    }
+                    onChange={
+                      handleChange
+                    }
+                    className="w-32 px-4 py-3 rounded-xl bg-[#0f172a] border border-white/10 outline-none focus:border-blue-500"
+                  />
+
+                  <span className="text-slate-500">
+                    years
+                  </span>
+
+                </div>
+
+              </div>
+
+              {/* BIO */}
+
+              <div className="mt-7">
+
+                <label className="text-sm text-slate-300">
+                  About you
+                </label>
+
+                <textarea
+                  name="bio"
+                  value={
+                    form.bio
+                  }
+                  onChange={
+                    handleChange
+                  }
+                  rows="4"
+                  maxLength="1000"
+                  placeholder="Example: I am an experienced electrician specializing in home wiring, fans, switches and electrical repairs."
+                  className="mt-2 w-full px-4 py-3 rounded-xl bg-[#0f172a] border border-white/10 outline-none focus:border-blue-500 resize-none"
+                />
+
+                <p className="text-xs text-slate-600 mt-1 text-right">
+                  {
+                    form.bio.length
+                  }
+                  /1000
+                </p>
+
+              </div>
+
+              {/* SKILLS */}
+
+              <div className="mt-7">
+
+                <label className="text-sm text-slate-300">
+                  Skills
+                </label>
+
+                <div className="flex gap-2 mt-2">
+
+                  <input
+                    value={
+                      skillInput
+                    }
+                    onChange={(e) =>
+                      setSkillInput(
+                        e.target.value
+                      )
+                    }
+                    onKeyDown={(e) => {
+                      if (
+                        e.key ===
+                        "Enter"
+                      ) {
+                        e.preventDefault();
+                        addSkill();
+                      }
+                    }}
+                    placeholder="e.g. Home Wiring"
+                    className="flex-1 px-4 py-3 rounded-xl bg-[#0f172a] border border-white/10 outline-none focus:border-blue-500"
+                  />
 
                   <button
                     type="button"
-                    onClick={() =>
-                      setForm(
-                        (prev) => ({
-                          ...prev,
-                          isAvailable:
-                            !prev.isAvailable,
-                        })
-                      )
+                    onClick={
+                      addSkill
                     }
-                    className={`w-14 h-8 rounded-full p-1 transition ${
-                      form.isAvailable
-                        ? "bg-emerald-500"
-                        : "bg-slate-700"
-                    }`}
+                    className="px-5 rounded-xl bg-white/10 hover:bg-white/15"
                   >
-
-                    <div
-                      className={`w-6 h-6 rounded-full bg-white transition ${
-                        form.isAvailable
-                          ? "translate-x-6"
-                          : ""
-                      }`}
-                    />
-
+                    Add
                   </button>
 
                 </div>
 
-              </section>
-            )}
+                {form.skills.length >
+                  0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+
+                    {form.skills.map(
+                      (skill) => (
+                        <button
+                          type="button"
+                          key={
+                            skill
+                          }
+                          onClick={() =>
+                            removeSkill(
+                              skill
+                            )
+                          }
+                          className="px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-sm"
+                        >
+                          {
+                            skill
+                          }{" "}
+                          ×
+                        </button>
+                      )
+                    )}
+
+                  </div>
+                )}
+
+              </div>
+
+              {/* AVAILABILITY */}
+
+              <div className="mt-7 flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+
+                <div>
+
+                  <p className="font-semibold">
+                    Available for jobs
+                  </p>
+
+                  <p className="text-xs text-slate-500 mt-1">
+                    Customers can find you when
+                    you are available.
+                  </p>
+
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm(
+                      (prev) => ({
+                        ...prev,
+                        isAvailable:
+                          !prev.isAvailable,
+                      })
+                    )
+                  }
+                  className={`w-14 h-8 rounded-full p-1 transition ${
+                    form.isAvailable
+                      ? "bg-emerald-500"
+                      : "bg-slate-700"
+                  }`}
+                >
+
+                  <div
+                    className={`w-6 h-6 rounded-full bg-white transition ${
+                      form.isAvailable
+                        ? "translate-x-6"
+                        : ""
+                    }`}
+                  />
+
+                </button>
+
+              </div>
+
+            </section>
+          )}
 
           {/* =====================================
               LOCATION
@@ -1300,53 +1651,46 @@ function Profile() {
                   : "📍 Use My Current Location"}
               </button>
 
-              {form.lat !==
-                null &&
-                form.lng !==
-                  null && (
-                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+              {form.lat !== null &&
+                form.lng !== null && (
 
-                    <p className="font-semibold">
-                      📍 Location detected
-                    </p>
+                <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
 
-                    <p className="text-sm mt-1">
-                      {
-                        form.address
-                      }
-                    </p>
+                  <p className="font-semibold">
+                    📍 Location detected
+                  </p>
 
-                    <p className="text-xs text-slate-500 mt-2">
-                      {form.lat.toFixed(
-                        6
-                      )}
-                      ,{" "}
-                      {form.lng.toFixed(
-                        6
-                      )}
-                    </p>
+                  <p className="text-sm mt-1">
+                    {
+                      form.address
+                    }
+                  </p>
 
-                  </div>
-                )}
+                  <p className="text-xs text-slate-500 mt-2">
+                    {Number(
+                      form.lat
+                    ).toFixed(6)}
+                    ,{" "}
+                    {Number(
+                      form.lng
+                    ).toFixed(6)}
+                  </p>
+
+                </div>
+              )}
 
             </div>
 
           </section>
 
-          {/* =====================================
-              SAVE
-          ===================================== */}
+          {/* SAVE */}
 
           <div className="flex flex-col sm:flex-row gap-3">
 
             <button
               type="button"
-              onClick={() =>
-                navigate(
-                  form.serviceTypes.length
-                    ? "/technician"
-                    : "/dashboard"
-                )
+              onClick={
+                goBack
               }
               className="px-6 py-4 rounded-xl border border-white/10 hover:bg-white/5"
             >
@@ -1366,6 +1710,256 @@ function Profile() {
           </div>
 
         </form>
+
+        {/* =================================================
+            TECHNICIAN REVIEWS
+        ================================================= */}
+
+        {currentUser?.role ===
+          "technician" && (
+
+          <section className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03] p-6 md:p-8">
+
+            {/* HEADER */}
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+
+              <div>
+
+                <p className="text-blue-400 text-sm font-semibold">
+                  CUSTOMER FEEDBACK
+                </p>
+
+                <h2 className="text-2xl font-bold mt-1">
+                  My Reviews
+                </h2>
+
+                <p className="text-slate-500 mt-2">
+                  Reviews submitted by customers
+                  after completed services.
+                </p>
+
+              </div>
+
+              {/* RATING */}
+
+              <div className="px-6 py-4 rounded-2xl bg-white/5 border border-white/10 text-center min-w-[150px]">
+
+                <div className="text-3xl font-black">
+
+                  {Number(
+                    averageRating || 0
+                  ).toFixed(1)}
+
+                  <span className="text-yellow-400 ml-1">
+                    ★
+                  </span>
+
+                </div>
+
+                <p className="text-sm text-slate-400 mt-1">
+
+                  {totalReviews}{" "}
+
+                  {totalReviews === 1
+                    ? "review"
+                    : "reviews"}
+
+                </p>
+
+              </div>
+
+            </div>
+
+            {/* REVIEW ERROR */}
+
+            {reviewsError && (
+              <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300">
+                {reviewsError}
+              </div>
+            )}
+
+            {/* LOADING */}
+
+            {reviewsLoading ? (
+
+              <div className="mt-8 py-10 text-center">
+
+                <div className="text-4xl">
+                  ⭐
+                </div>
+
+                <p className="text-slate-400 mt-3">
+                  Loading reviews...
+                </p>
+
+              </div>
+
+            ) : reviews.length ===
+              0 ? (
+
+              /* NO REVIEWS */
+
+              <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.02] p-10 text-center">
+
+                <div className="text-5xl">
+                  ⭐
+                </div>
+
+                <h3 className="text-lg font-semibold mt-4">
+                  No reviews yet
+                </h3>
+
+                <p className="text-slate-500 mt-2">
+                  Customer reviews will appear
+                  here after completed services.
+                </p>
+
+              </div>
+
+            ) : (
+
+              /* REVIEWS */
+
+              <div className="mt-8 space-y-4">
+
+                {reviews.map(
+                  (review) => {
+
+                    const rating =
+                      Number(
+                        review.rating ||
+                          0
+                      );
+
+                    const customer =
+                      review.user ||
+                      review.customer ||
+                      {};
+
+                    return (
+
+                      <div
+                        key={
+                          review._id ||
+                          Math.random()
+                        }
+                        className="rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+                      >
+
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+
+                          {/* CUSTOMER */}
+
+                          <div className="flex items-center gap-3">
+
+                            {customer.profilePhoto ? (
+
+                              <img
+                                src={
+                                  customer.profilePhoto
+                                }
+                                alt={
+                                  customer.name ||
+                                  "Customer"
+                                }
+                                className="w-12 h-12 rounded-full object-cover border border-white/10"
+                              />
+
+                            ) : (
+
+                              <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-xl">
+                                👤
+                              </div>
+
+                            )}
+
+                            <div>
+
+                              <p className="font-semibold">
+                                {
+                                  customer.name ||
+                                  review.userName ||
+                                  "Customer"
+                                }
+                              </p>
+
+                              <p className="text-xs text-slate-500 mt-1">
+
+                                {review.createdAt
+                                  ? new Date(
+                                      review.createdAt
+                                    ).toLocaleDateString(
+                                      "en-IN",
+                                      {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                      }
+                                    )
+                                  : ""}
+
+                              </p>
+
+                            </div>
+
+                          </div>
+
+                          {/* STARS */}
+
+                          <div className="flex items-center gap-1">
+
+                            {[1, 2, 3, 4, 5].map(
+                              (star) => (
+
+                                <span
+                                  key={
+                                    star
+                                  }
+                                  className={
+                                    star <=
+                                    rating
+                                      ? "text-yellow-400 text-lg"
+                                      : "text-slate-600 text-lg"
+                                  }
+                                >
+                                  ★
+                                </span>
+
+                              )
+                            )}
+
+                            <span className="ml-2 text-sm text-slate-400">
+                              {rating}/5
+                            </span>
+
+                          </div>
+
+                        </div>
+
+                        {/* COMMENT */}
+
+                        {review.comment && (
+
+                          <p className="mt-4 text-slate-300 leading-relaxed">
+                            "{review.comment}"
+                          </p>
+
+                        )}
+
+                      </div>
+
+                    );
+                  }
+                )}
+
+              </div>
+
+            )}
+
+          </section>
+
+        )}
 
       </main>
     </div>
