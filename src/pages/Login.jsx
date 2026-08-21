@@ -13,6 +13,10 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // SHOW / HIDE PASSWORD
+  const [showPassword, setShowPassword] =
+    useState(false);
+
   const handleChange = (e) => {
     setForm((prev) => ({
       ...prev,
@@ -48,19 +52,13 @@ const Login = () => {
         return;
       }
 
-      // =====================================
       // SAVE TOKEN
-      // =====================================
-
       localStorage.setItem(
         "nearbyfix_token",
         data.token
       );
 
-      // =====================================
       // SAVE USER
-      // =====================================
-
       localStorage.setItem(
         "nearbyfix_user",
         JSON.stringify(data.user)
@@ -80,39 +78,22 @@ const Login = () => {
         )
       );
 
-      // =====================================
       // ROLE BASED REDIRECT
-      // =====================================
-
       const role = data.user.role;
 
       if (role === "technician") {
-        console.log(
-          "TECHNICIAN LOGIN -> /technician"
-        );
-
         navigate("/technician", {
           replace: true,
         });
-
         return;
       }
 
       if (role === "admin") {
-        console.log(
-          "ADMIN LOGIN -> /admin"
-        );
-
         navigate("/admin", {
           replace: true,
         });
-
         return;
       }
-
-      console.log(
-        "USER LOGIN -> /dashboard"
-      );
 
       navigate("/dashboard", {
         replace: true,
@@ -170,6 +151,8 @@ const Login = () => {
             className="space-y-5"
           >
 
+            {/* EMAIL */}
+
             <div>
 
               <label className="block mb-2 text-sm">
@@ -188,21 +171,48 @@ const Login = () => {
 
             </div>
 
+            {/* PASSWORD */}
+
             <div>
 
               <label className="block mb-2 text-sm">
                 Password
               </label>
 
-              <input
-                name="password"
-                type="password"
-                value={form.password}
-                onChange={handleChange}
-                placeholder="Enter your password"
-                autoComplete="current-password"
-                className="w-full px-4 py-3 rounded-lg bg-slate-900 border border-white/10 outline-none focus:border-blue-500"
-              />
+              <div className="relative">
+
+                <input
+                  name="password"
+                  type={
+                    showPassword
+                      ? "text"
+                      : "password"
+                  }
+                  value={form.password}
+                  onChange={handleChange}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  className="w-full px-4 py-3 pr-12 rounded-lg bg-slate-900 border border-white/10 outline-none focus:border-blue-500"
+                />
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowPassword(
+                      !showPassword
+                    )
+                  }
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
+                  aria-label={
+                    showPassword
+                      ? "Hide password"
+                      : "Show password"
+                  }
+                >
+                  {showPassword ? "🙈" : "👁️"}
+                </button>
+
+              </div>
 
             </div>
 

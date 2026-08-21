@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import Technician from "./pages/Technician";
 import TechnicianProfile from "./pages/TechnicianProfile";
 import TechnicianOwnProfile from "./pages/TechnicianOwnProfile";
+import AdminDashboard from "./pages/AdminDashboard";
 
 function App() {
   return (
@@ -60,6 +61,15 @@ function App() {
           path="/profile"
           element={<Profile />}
         />
+
+        {/* ================================
+    ADMIN
+================================= */}
+
+<Route
+  path="/admin"
+  element={<AdminDashboard />}
+/>
 
         {/* ================================
             TECHNICIAN DASHBOARD
