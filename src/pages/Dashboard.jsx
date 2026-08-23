@@ -213,39 +213,48 @@ function Dashboard() {
   // THEME
   // =====================================================
 
-  const [themeName, setThemeName] =
-    useState(() => {
-      return (
-        localStorage.getItem(
-          "nearbyfix_theme"
-        ) || "blue"
-      );
-    });
-    const [showThemePicker, setShowThemePicker] =
+  const [themeName, setThemeName] = useState(() => {
+  const savedTheme = localStorage.getItem(
+    "nearbyfix_theme"
+  );
+
+  return THEMES?.[savedTheme]
+    ? savedTheme
+    : "blue";
+});
+
+const [showThemePicker, setShowThemePicker] =
   useState(false);
 
-  useEffect(() => {
-    const theme =
-      THEMES[themeName];
+useEffect(() => {
+  const theme =
+    THEMES?.[themeName] || THEMES?.blue;
 
-    const root =
-      document.documentElement;
-
-    Object.entries(theme).forEach(
-      ([key, value]) => {
-        root.style.setProperty(
-          `--theme-${key}`,
-          value
-        );
-      }
-    );
-
-    localStorage.setItem(
-      "nearbyfix_theme",
+  if (!theme) {
+    console.error(
+      "Theme configuration not found:",
       themeName
     );
-  }, [themeName]);
+    return;
+  }
 
+  const root =
+    document.documentElement;
+
+  Object.entries(theme).forEach(
+    ([key, value]) => {
+      root.style.setProperty(
+        `--theme-${key}`,
+        value
+      );
+    }
+  );
+
+  localStorage.setItem(
+    "nearbyfix_theme",
+    themeName
+  );
+}, [themeName]);
   // =====================================================
   // USER
   // =====================================================
