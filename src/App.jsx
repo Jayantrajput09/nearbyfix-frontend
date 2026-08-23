@@ -5,6 +5,8 @@ import {
   Navigate,
 } from "react-router-dom";
 
+import Home from "./pages/Home";
+
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -25,17 +27,12 @@ function App() {
       <Routes>
 
         {/* ================================
-            HOME
+            HOME / LANDING PAGE
         ================================= */}
 
         <Route
           path="/"
-          element={
-            <Navigate
-              to="/login"
-              replace
-            />
-          }
+          element={<Home />}
         />
 
         {/* ================================
@@ -63,7 +60,6 @@ function App() {
 
         {/* ================================
             RESET PASSWORD
-            Token comes from email link
         ================================= */}
 
         <Route
@@ -106,15 +102,12 @@ function App() {
         {/* ================================
             TECHNICIAN OWN PROFILE
 
-            IMPORTANT:
-            Keep this before /technician/:id
+            Keep before /technician/:id
         ================================= */}
 
         <Route
           path="/technician/profile"
-          element={
-            <TechnicianOwnProfile />
-          }
+          element={<TechnicianOwnProfile />}
         />
 
         {/* ================================
@@ -123,9 +116,7 @@ function App() {
 
         <Route
           path="/technician/:id"
-          element={
-            <TechnicianProfile />
-          }
+          element={<TechnicianProfile />}
         />
 
         {/* ================================
@@ -134,12 +125,7 @@ function App() {
 
         <Route
           path="*"
-          element={
-            <Navigate
-              to="/login"
-              replace
-            />
-          }
+          element={<Navigate to="/" replace />}
         />
 
       </Routes>
