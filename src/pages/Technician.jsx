@@ -1,13 +1,16 @@
  
-import { useEffect, useMemo, useState } from "react"; 
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom"; 
  
-import { 
-  getTechnicianProfile, 
-  getTechnicianRequests, 
-  acceptServiceRequest, 
-  updateTechnicianRequestStatus, 
-} from "../services/api"; 
+import {
+  getTechnicianProfile,
+  getTechnicianRequests,
+  acceptServiceRequest,
+  updateTechnicianRequestStatus,
+  getChatMessages,
+} from "../services/api";
+
+import { io } from "socket.io-client";
  
 const Technician = () => { 
   const navigate = useNavigate(); 
@@ -22,6 +25,17 @@ const Technician = () => {
   const [requestError, setRequestError] = useState(""); 
  
   const [processingId, setProcessingId] = useState(null); 
+
+  // CHAT
+const [activeChatRequest, setActiveChatRequest] = useState(null);
+const [chatMessages, setChatMessages] = useState([]);
+const [chatInput, setChatInput] = useState("");
+const [chatLoading, setChatLoading] = useState(false);
+const [chatSending, setChatSending] = useState(false);
+const [chatError, setChatError] = useState("");
+
+const socketRef = useRef(null);
+const chatMessagesEndRef = useRef(null);
  
   // ACCEPT MODAL 
   const [showAcceptModal, setShowAcceptModal] = useState(false); 
@@ -368,6 +382,273 @@ const Technician = () => {
       setProcessingId(null); 
     } 
   }; 
+
+  // =====================================================
+// CHAT
+// =====================================================
+
+const scrollChatToBottom = () => {
+  setTimeout(() => {
+    chatMessagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, 50);
+};
+
+const closeChat = () => {
+  if (socketRef.current && activeChatRequest?._id) {
+    socketRef.current.emit(
+      "leaveChat",
+      activeChatRequest._id
+    );
+  }
+
+  setActiveChatRequest(null);
+  setChatMessages([]);
+  setChatInput("");
+  setChatError("");
+};
+
+const openChat = async (request) => {
+  if (!request?._id) {
+    return;
+  }
+
+  if (!request.technician) {
+    setRequestError(
+      "Chat is available after accepting the request."
+    );
+    return;
+  }
+
+  try {
+    setChatLoading(true);
+    setChatError("");
+    setChatMessages([]);
+
+    setActiveChatRequest(request);
+
+    const data = await getChatMessages(
+      request._id
+    );
+
+    if (!data?.success) {
+      throw new Error(
+        data?.message ||
+          "Failed to load chat messages"
+      );
+    }
+
+    setChatMessages(
+      Array.isArray(data.messages)
+        ? data.messages
+        : []
+    );
+
+    scrollChatToBottom();
+
+    if (!socketRef.current) {
+      const token = localStorage.getItem(
+        "nearbyfix_token"
+      );
+
+      if (!token) {
+        throw new Error(
+          "Authentication token not found"
+        );
+      }
+
+      const socket = io(
+        import.meta.env.VITE_API_URL?.replace(
+          /\/api$/,
+          ""
+        ),
+        {
+          auth: {
+            token,
+          },
+        }
+      );
+
+      socketRef.current = socket;
+
+      socket.on("connect", () => {
+        console.log(
+          "CHAT SOCKET CONNECTED:",
+          socket.id
+        );
+      });
+
+      socket.on("connect_error", (error) => {
+        console.error(
+          "CHAT SOCKET ERROR:",
+          error
+        );
+
+        setChatError(
+          "Unable to connect to real-time chat."
+        );
+      });
+
+      socket.on(
+        "newMessage",
+        (newMessage) => {
+          setChatMessages((prev) => {
+            const alreadyExists =
+              prev.some(
+                (message) =>
+                  message._id ===
+                  newMessage._id
+              );
+
+            if (alreadyExists) {
+              return prev;
+            }
+
+            return [
+              ...prev,
+              newMessage,
+            ];
+          });
+
+          scrollChatToBottom();
+        }
+      );
+    }
+
+    const socket = socketRef.current;
+
+    const joinChat = () => {
+      socket.emit(
+        "joinChat",
+        request._id,
+        (response) => {
+          console.log(
+            "JOIN CHAT RESPONSE:",
+            response
+          );
+
+          if (!response?.success) {
+            setChatError(
+              response?.message ||
+                "Failed to join chat"
+            );
+          }
+        }
+      );
+    };
+
+    if (socket.connected) {
+      joinChat();
+    } else {
+      socket.once(
+        "connect",
+        joinChat
+      );
+    }
+  } catch (err) {
+    console.error(
+      "OPEN CHAT ERROR:",
+      err
+    );
+
+    setChatError(
+      err.response?.data?.message ||
+        err.message ||
+        "Failed to open chat"
+    );
+  } finally {
+    setChatLoading(false);
+  }
+};
+
+const sendChatMessage = () => {
+  const message = chatInput.trim();
+
+  if (!message) {
+    return;
+  }
+
+  if (!activeChatRequest?._id) {
+    return;
+  }
+
+  if (!socketRef.current) {
+    setChatError(
+      "Chat connection is not available."
+    );
+    return;
+  }
+
+  if (!socketRef.current.connected) {
+    setChatError(
+      "Chat connection is not connected."
+    );
+    return;
+  }
+
+  if (message.length > 1000) {
+    setChatError(
+      "Message cannot exceed 1000 characters."
+    );
+    return;
+  }
+
+  setChatSending(true);
+  setChatError("");
+
+  socketRef.current.emit(
+    "sendMessage",
+    {
+      requestId:
+        activeChatRequest._id,
+      message,
+    },
+    (response) => {
+      console.log(
+        "SEND MESSAGE RESPONSE:",
+        response
+      );
+
+      if (!response?.success) {
+        setChatError(
+          response?.message ||
+            "Failed to send message"
+        );
+
+        setChatSending(false);
+        return;
+      }
+
+      setChatInput("");
+      setChatSending(false);
+      scrollChatToBottom();
+    }
+  );
+};
+
+const handleChatKeyDown = (e) => {
+  if (
+    e.key === "Enter" &&
+    !e.shiftKey
+  ) {
+    e.preventDefault();
+    sendChatMessage();
+  }
+};
+
+useEffect(() => {
+  return () => {
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+  };
+}, []);
+
+useEffect(() => {
+  scrollChatToBottom();
+}, [chatMessages]);
  
   // ===================================================== 
   // LOGOUT 
@@ -1243,6 +1524,33 @@ const Technician = () => {
  
                         </div> 
                       )} 
+
+                      {/* CHAT */}
+
+{isAssignedToMe && (
+  <div className="mt-6 pt-5 border-t border-white/10">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h4 className="font-bold">
+          Chat with Customer
+        </h4>
+
+        <p className="text-xs text-slate-500 mt-1">
+          Talk to the customer in real time.
+        </p>
+      </div>
+
+      <button
+        onClick={() =>
+          openChat(request)
+        }
+        className="px-5 py-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 hover:bg-blue-500/20 font-semibold text-sm transition"
+      >
+        💬 Open Chat
+      </button>
+    </div>
+  </div>
+)}
  
                       {/* STATUS ACTIONS */} 
  
@@ -1534,6 +1842,150 @@ const Technician = () => {
           </div> 
         </div> 
       )} 
+
+      {/* Chat Modal */}
+{activeChatRequest && (
+  <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+    {/* Background */}
+    <button
+      type="button"
+      aria-label="Close chat"
+      onClick={closeChat}
+      className="absolute inset-0 bg-black/75 backdrop-blur-sm"
+    />
+
+    {/* Chat Box */}
+    <div className="relative w-full max-w-2xl h-[80vh] max-h-[700px] rounded-[28px] border border-white/10 bg-[#0b1422] shadow-2xl overflow-hidden flex flex-col">
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div>
+          <h3 className="font-bold text-white text-lg">
+            Chat with {getCustomer(activeChatRequest)?.name || "Customer"}
+          </h3>
+
+          <p className="text-xs text-slate-400 mt-1">
+            {activeChatRequest?.serviceType
+              ?.replace("-", " ")
+              .replace(/\b\w/g, (char) => char.toUpperCase())}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={closeChat}
+          className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-3">
+        {chatLoading ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="text-slate-400 text-sm">
+              Loading messages...
+            </div>
+          </div>
+        ) : chatMessages.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-center">
+            <div>
+              <div className="text-4xl mb-3">💬</div>
+              <p className="text-slate-400">
+                No messages yet.
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                Start the conversation with the customer.
+              </p>
+            </div>
+          </div>
+        ) : (
+          chatMessages.map((message, index) => {
+            const senderId =
+              message?.sender?._id ||
+              message?.sender?.id ||
+              message?.senderId ||
+              message?.sender;
+
+            const isMine =
+              String(senderId || "") ===
+              String(technician?._id || technician?.id || "");
+
+            return (
+              <div
+                key={message?._id || message?.id || index}
+                className={`flex ${
+                  isMine ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                    isMine
+                      ? "bg-blue-500 text-white rounded-br-md"
+                      : "bg-white/5 border border-white/10 text-slate-200 rounded-bl-md"
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap break-words">
+                    {message?.message || message?.content || ""}
+                  </p>
+
+                  {message?.createdAt && (
+                    <p
+                      className={`text-[10px] mt-1 ${
+                        isMine
+                          ? "text-blue-100"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {formatDate(message.createdAt)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        <div ref={chatMessagesEndRef} />
+      </div>
+
+      {/* Error */}
+      {chatError && (
+        <div className="mx-4 mb-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 text-xs">
+          {chatError}
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="p-4 border-t border-white/10">
+        <div className="flex gap-3 items-end">
+          <textarea
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={handleChatKeyDown}
+            placeholder="Type a message..."
+            rows={2}
+            className="flex-1 resize-none rounded-2xl bg-white/5 border border-white/10 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-500/50"
+          />
+
+          <button
+            type="button"
+            onClick={sendChatMessage}
+            disabled={chatSending || !chatInput.trim()}
+            className="px-5 py-3 rounded-2xl bg-blue-500 hover:bg-blue-600 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition"
+          >
+            {chatSending ? "..." : "Send"}
+          </button>
+        </div>
+
+        <p className="text-[10px] text-slate-500 mt-2">
+          Press Enter to send • Shift + Enter for new line
+        </p>
+      </div>
+    </div>
+  </div>
+)}
  
     </div> 
   ); 
