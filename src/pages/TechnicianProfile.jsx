@@ -631,19 +631,7 @@ const TechnicianProfile = () => {
 
                   </div>
 
-                  {technician.phone && (
-                    <div className="px-4 py-2 rounded-xl bg-white/5 border border-white/10">
-
-                      <span className="text-slate-500 text-sm">
-                        Phone
-                      </span>
-
-                      <span className="ml-2 font-semibold">
-                        {technician.phone}
-                      </span>
-
-                    </div>
-                  )}
+                  
 
                 </div>
 
