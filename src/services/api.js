@@ -713,6 +713,45 @@ export const deleteReview = async (
 };
 
 // =====================================================
+// CHAT
+// =====================================================
+
+export const getChatMessages = async (requestId) => {
+  if (!requestId) {
+    throw new Error("Request ID is required");
+  }
+
+  const response = await API.get(
+    `/chat/${requestId}/messages`
+  );
+
+  return response.data;
+};
+
+export const sendChatMessage = async (
+  requestId,
+  message
+) => {
+  if (!requestId) {
+    throw new Error("Request ID is required");
+  }
+
+  const cleanMessage = String(message || "").trim();
+
+  if (!cleanMessage) {
+    throw new Error("Message is required");
+  }
+
+  const response = await API.post(
+    `/chat/${requestId}/messages`,
+    {
+      message: cleanMessage,
+    }
+  );
+
+  return response.data;
+};
+// =====================================================
 // DEFAULT EXPORT
 // =====================================================
 

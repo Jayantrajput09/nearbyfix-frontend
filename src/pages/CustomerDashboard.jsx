@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
@@ -6,7 +6,10 @@ import {
   getRecommendedTechnicians,
   createServiceRequest,
   getMyRequests,
+  getChatMessages,
 } from "../services/api";
+
+import { io } from "socket.io-client";
 
 const SERVICE_NAMES = {
   electrician: "Electrician",
@@ -45,6 +48,32 @@ const CustomerDashboard = () => {
 
   const [requests, setRequests] =
     useState([]);
+
+      // =====================================================
+  // CHAT
+  // =====================================================
+
+  const [activeChatRequest, setActiveChatRequest] =
+    useState(null);
+
+  const [chatMessages, setChatMessages] =
+    useState([]);
+
+  const [chatInput, setChatInput] =
+    useState("");
+
+  const [chatLoading, setChatLoading] =
+    useState(false);
+
+  const [chatSending, setChatSending] =
+    useState(false);
+
+  const [chatError, setChatError] =
+    useState("");
+
+  const socketRef = useRef(null);
+
+  const chatMessagesEndRef = useRef(null);
 
   const [selectedTechnician, setSelectedTechnician] =
     useState(null);
@@ -140,10 +169,21 @@ const CustomerDashboard = () => {
         response;
 
       if (data?.success) {
-        setRequests(
-          data.requests || []
-        );
-      } else {
+  console.log("CUSTOMER REQUESTS:", data.requests);
+
+  data.requests?.forEach((request) => {
+    console.log(
+      "REQUEST:",
+      request._id,
+      "TECHNICIAN:",
+      request.technician
+    );
+  });
+
+  setRequests(
+    data.requests || []
+  );
+} else {
         setRequests([]);
       }
     } catch (error) {
@@ -517,6 +557,238 @@ const CustomerDashboard = () => {
       setRequestLoading(false);
     }
   };
+
+    const scrollChatToBottom = () => {
+    setTimeout(() => {
+      chatMessagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+      });
+    }, 50);
+  };
+
+  const closeChat = () => {
+    setActiveChatRequest(null);
+    setChatMessages([]);
+    setChatInput("");
+    setChatError("");
+  };
+
+  const openChat = async (request) => {
+    if (!request?._id) return;
+
+    if (!request.technician) {
+      setChatError(
+        "Chat is available after a technician accepts the request."
+      );
+      return;
+    }
+
+    try {
+      setChatLoading(true);
+      setChatError("");
+      setChatMessages([]);
+      setActiveChatRequest(request);
+
+      // Load old messages
+      const data = await getChatMessages(request._id);
+
+      if (!data?.success) {
+        throw new Error(
+          data?.message || "Failed to load chat messages"
+        );
+      }
+
+      setChatMessages(
+        Array.isArray(data.messages)
+          ? data.messages
+          : []
+      );
+
+      scrollChatToBottom();
+
+      // Create socket connection only once
+      if (!socketRef.current) {
+        const token =
+          localStorage.getItem("nearbyfix_token");
+
+        if (!token) {
+          throw new Error(
+            "Authentication token not found"
+          );
+        }
+
+        const socket = io(
+  import.meta.env.VITE_API_URL?.replace(
+    /\/api$/,
+    ""
+  ),
+  {
+    auth: {
+      token,
+    },
+  }
+);
+
+        socketRef.current = socket;
+
+        socket.on("connect", () => {
+          console.log(
+            "CUSTOMER CHAT SOCKET CONNECTED:",
+            socket.id
+          );
+        });
+
+        socket.on("connect_error", (error) => {
+          console.error(
+            "CUSTOMER CHAT SOCKET ERROR:",
+            error
+          );
+
+          setChatError(
+            "Unable to connect to real-time chat."
+          );
+        });
+
+        socket.on("newMessage", (newMessage) => {
+          setChatMessages((prev) => {
+            const alreadyExists = prev.some(
+              (message) =>
+                message._id === newMessage._id
+            );
+
+            if (alreadyExists) {
+              return prev;
+            }
+
+            return [...prev, newMessage];
+          });
+
+          scrollChatToBottom();
+        });
+      }
+
+      const socket = socketRef.current;
+
+      const joinChat = () => {
+        socket.emit(
+          "joinChat",
+          request._id,
+          (response) => {
+            console.log(
+              "CUSTOMER JOIN CHAT RESPONSE:",
+              response
+            );
+
+            if (!response?.success) {
+              setChatError(
+                response?.message ||
+                  "Failed to join chat"
+              );
+            }
+          }
+        );
+      };
+
+      if (socket.connected) {
+        joinChat();
+      } else {
+        socket.once("connect", joinChat);
+      }
+    } catch (error) {
+      console.error(
+        "CUSTOMER OPEN CHAT ERROR:",
+        error
+      );
+
+      setChatError(
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to open chat"
+      );
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const sendChatMessage = () => {
+    const cleanMessage = chatInput.trim();
+
+    if (!cleanMessage) return;
+
+    if (!activeChatRequest?._id) return;
+
+    if (!socketRef.current) {
+      setChatError(
+        "Chat connection is not available."
+      );
+      return;
+    }
+
+    if (!socketRef.current.connected) {
+      setChatError(
+        "Chat connection is not connected."
+      );
+      return;
+    }
+
+    if (cleanMessage.length > 1000) {
+      setChatError(
+        "Message cannot exceed 1000 characters."
+      );
+      return;
+    }
+
+    setChatSending(true);
+    setChatError("");
+
+    socketRef.current.emit(
+      "sendMessage",
+      {
+        requestId: activeChatRequest._id,
+        message: cleanMessage,
+      },
+      (response) => {
+        console.log(
+          "CUSTOMER SEND MESSAGE RESPONSE:",
+          response
+        );
+
+        if (!response?.success) {
+          setChatError(
+            response?.message ||
+              "Failed to send message"
+          );
+
+          setChatSending(false);
+          return;
+        }
+
+        setChatInput("");
+        setChatSending(false);
+        scrollChatToBottom();
+      }
+    );
+  };
+
+  const handleChatKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendChatMessage();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    scrollChatToBottom();
+  }, [chatMessages]);
 
   // =====================================================
   // STATUS
@@ -1080,6 +1352,7 @@ const CustomerDashboard = () => {
                             : ""}
                         </p>
 
+                        
                       </div>
 
                     </div>
@@ -1391,6 +1664,147 @@ const CustomerDashboard = () => {
 
           </div>
         )}
+
+        {activeChatRequest && (
+  <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+
+      {/* Chat Header */}
+      <div className="p-5 border-b border-white/10 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">
+            Chat with{" "}
+            {activeChatRequest.technician?.name ||
+              "Technician"}
+          </h2>
+
+          <p className="text-sm text-slate-400 mt-1">
+            {SERVICE_NAMES[
+              activeChatRequest.serviceType
+            ] ||
+              activeChatRequest.serviceType}
+          </p>
+        </div>
+
+        <button
+          onClick={closeChat}
+          className="text-slate-400 hover:text-white text-2xl"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div className="h-[420px] overflow-y-auto p-5 space-y-3">
+
+        {chatLoading ? (
+          <div className="h-full flex items-center justify-center text-slate-400">
+            Loading chat...
+          </div>
+        ) : chatMessages.length === 0 ? (
+          <div className="h-full flex items-center justify-center text-slate-500">
+            No messages yet. Start conversation...
+          </div>
+        ) : (
+          chatMessages.map((chatMessage) => {
+            const currentUserId =
+              user?._id || user?.id;
+
+            const senderId =
+              chatMessage.sender?._id ||
+              chatMessage.sender?.id ||
+              chatMessage.sender;
+
+            const isMine =
+              String(senderId) ===
+              String(currentUserId);
+
+            return (
+              <div
+                key={chatMessage._id}
+                className={`flex ${
+                  isMine
+                    ? "justify-end"
+                    : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                    isMine
+                      ? "bg-blue-600"
+                      : "bg-white/10"
+                  }`}
+                >
+
+                  {!isMine && (
+                    <p className="text-xs text-slate-400 mb-1">
+                      {chatMessage.sender?.name ||
+                        "Technician"}
+                    </p>
+                  )}
+
+                  <p className="whitespace-pre-wrap break-words">
+                    {chatMessage.message}
+                  </p>
+
+                  <p className="text-[10px] opacity-60 mt-1">
+                    {chatMessage.createdAt
+                      ? new Date(
+                          chatMessage.createdAt
+                        ).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : ""}
+                  </p>
+
+                </div>
+              </div>
+            );
+          })
+        )}
+
+        <div ref={chatMessagesEndRef} />
+      </div>
+
+      {/* Error */}
+      {chatError && (
+        <div className="mx-5 mb-3 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-red-300 text-sm">
+          {chatError}
+        </div>
+      )}
+
+      {/* Message Input */}
+      <div className="p-4 border-t border-white/10 flex gap-3">
+
+        <textarea
+          value={chatInput}
+          onChange={(e) =>
+            setChatInput(e.target.value)
+          }
+          onKeyDown={handleChatKeyDown}
+          placeholder="Type your message..."
+          rows={2}
+          maxLength={1000}
+          className="flex-1 bg-slate-800 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-blue-500 resize-none"
+        />
+
+        <button
+          onClick={sendChatMessage}
+          disabled={
+            chatSending ||
+            !chatInput.trim()
+          }
+          className="px-5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:cursor-not-allowed font-semibold"
+        >
+          {chatSending ? "..." : "Send"}
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+)}
 
     </div>
   );
